@@ -5,7 +5,6 @@ import { Test } from "forge-std/src/Test.sol";
 import { console2 } from "forge-std/src/console2.sol";
 import { IERC721Receiver } from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-// import "forge-std/Test.sol";
 import { NFTLendHub } from "../src/NFTLendHub.sol";
 import { MockNFT } from "../src/MockNFT.sol";
 import { MockUSDC } from "../src/MockUSDC.sol";
@@ -21,66 +20,71 @@ contract NFTLendHubTest is Test, IERC721Receiver {
         lendHub = new NFTLendHub(address(usdc), 5, 3); // 5% interest, max 3 lendings
         // transfer some usdc to lendHub
         usdc.approve(address(lendHub), type(uint256).max);
-        usdc.transfer(address(lendHub), 1000);
-        // mint 5 nft to address(1).
-        for (uint256 i = 0; i < 5; i++) {
-            nft.safeMint(address(1), "https://example.com");
-        }
+        usdc.transfer(address(lendHub), 1000 ether);
+        // mint 1 nft to address(1). tokenID = 0
+        nft.safeMint(address(1), "https://example.com");
     }
 
-    // initiateLoan()
+    // initiateLoan() tests
 
     function testInitiateLoan_Success() public {
+        uint256 tokenId = 0;
+        uint256 amountLend = 5 ether;
+        uint256 durationHours = 24;
         vm.startPrank(address(1));
-        nft.approve(address(lendHub), 0);
-        uint256 txId = lendHub.initiateLoan(address(nft), 0, 100, 24);
+        nft.approve(address(lendHub), tokenId);
+        uint256 txId = lendHub.initiateLoan(address(nft), tokenId, amountLend, durationHours);
         assertTrue(lendHub.getTransactionStatus(txId));
         vm.stopPrank();
     }
 
     function testInitiateLoan_FailDueToLoanLimit() public {
-        vm.startPrank(address(1));
-        // approve nft id from 1 to 4 to lendHub
+        // mint 4 nft to address(1), Ids 1 to 4, and approve lendHub to use them.
         for (uint256 i = 1; i < 5; i++) {
+            nft.safeMint(address(1), "https://example.com");
+            vm.prank(address(1));
             nft.approve(address(lendHub), i);
         }
-        lendHub.initiateLoan(address(nft), 1, 100, 24);
-        lendHub.initiateLoan(address(nft), 2, 100, 24);
-        lendHub.initiateLoan(address(nft), 3, 100, 24);
+        uint256 amountLend = 5 ether;
+        uint256 durationHours = 24;
+        vm.startPrank(address(1));
+        lendHub.initiateLoan(address(nft), 1, amountLend, durationHours);
+        lendHub.initiateLoan(address(nft), 2, amountLend, durationHours);
+        lendHub.initiateLoan(address(nft), 3, amountLend, durationHours);
         vm.expectRevert("Loan limit exceeded");
-        lendHub.initiateLoan(address(nft), 4, 100, 24);
+        lendHub.initiateLoan(address(nft), 4, amountLend, durationHours);
         vm.stopPrank();
     }
 
     function testInitiateLoan_FailDueToNonOwnership() public {
-        nft.safeMint(address(2), "https://example.com");
-        uint256 tokenId = 5;
-        // Address 2 approves lendHub to use the NFT
-        vm.prank(address(2));
-        nft.approve(address(lendHub), tokenId);
-        // Address 1 attempts to initiate the loan
+        uint256 tokenId = 0;
+        uint256 amountLend = 5 ether;
+        uint256 durationHours = 24;
+        // Address 1 approves lendHub to use the NFT
         vm.prank(address(1));
+        nft.approve(address(lendHub), tokenId);
+        // Address 2 attempts to initiate the loan
+        vm.prank(address(2));
         vm.expectRevert("Caller must own the NFT");
-        lendHub.initiateLoan(address(nft), tokenId, 50, 24);
+        lendHub.initiateLoan(address(nft), tokenId, amountLend, durationHours);
     }
 
     function testInitiateLoan_FailDueToExcessiveDuration() public {
-        nft.safeMint(address(1), "https://example.com");
-        uint256 tokenId = 5;
+        uint256 tokenId = 0;
+        uint256 amountLend = 5 ether;
         vm.startPrank(address(1));
         nft.approve(address(lendHub), tokenId);
         uint256 excessiveDuration = lendHub.MAX_HOURS_FOR_LOAN() + 1;
         vm.expectRevert("Loan duration exceeds maximum allowed");
-        lendHub.initiateLoan(address(nft), tokenId, 100, excessiveDuration);
+        lendHub.initiateLoan(address(nft), tokenId, amountLend, excessiveDuration);
         vm.stopPrank();
     }
 
     // repayLoan()
 
     function testRepayLoan_Success() public {
-        nft.safeMint(address(1), "https://example.com");
-        uint256 tokenId = 5;
-        uint256 amountLent = 100;
+        uint256 tokenId = 0;
+        uint256 amountLent = 5 ether;
         uint256 durationHours = 24;
 
         vm.startPrank(address(1));
@@ -102,9 +106,8 @@ contract NFTLendHubTest is Test, IERC721Receiver {
     }
 
     function testRepayLoan_FailDueToInsufficientAmount() public {
-        nft.safeMint(address(1), "https://example.com");
-        uint256 tokenId = 5;
-        uint256 amountLent = 100;
+        uint256 tokenId = 0;
+        uint256 amountLent = 5 ether;
         uint256 durationHours = 24;
 
         vm.startPrank(address(1));
@@ -122,14 +125,9 @@ contract NFTLendHubTest is Test, IERC721Receiver {
         vm.stopPrank();
     }
 
-    // Generate the test cases for the following functions:
-    // testRepayLoan_Success: Verifies successful loan repayment and return of the NFT.
-    // testRepayLoan_FailDueToWrongUser: Tries to repay the loan by a user who isn't the borrower.
-
     function testRepayLoan_FailDueToWrongUser() public {
-        nft.safeMint(address(1), "https://example.com");
-        uint256 tokenId = 5;
-        uint256 amountLent = 100;
+        uint256 tokenId = 0;
+        uint256 amountLent = 5 ether;
         uint256 durationHours = 24;
 
         vm.startPrank(address(1));
@@ -147,7 +145,6 @@ contract NFTLendHubTest is Test, IERC721Receiver {
         vm.expectRevert("Only the borrower can repay the loan");
         lendHub.repayLoan(transactionId, totalDue);
     }
-
 
     // ERC721 Receiver implementation
     function onERC721Received(address, address, uint256, bytes memory) public virtual override returns (bytes4) {

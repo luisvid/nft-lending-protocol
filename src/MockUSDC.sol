@@ -10,7 +10,7 @@ contract MockUSDC is ERC20, Ownable {
         ERC20("MockUSDC", "USDC")
         Ownable(initialOwner)
     {
-        _mint(msg.sender, 10_000 * 10 ** decimals());
+        _mint(msg.sender, 100_000 * 10 ** decimals());
     }
 
     function mint(address to, uint256 amount) public onlyOwner {

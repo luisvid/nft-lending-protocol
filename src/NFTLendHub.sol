@@ -93,6 +93,8 @@ contract NFTLendHub is IERC721Receiver {
 
         require(msg.sender != address(0), "Cannot lend to zero address");
         require(msg.sender == nft.ownerOf(tokenId), "Caller must own the NFT");
+        // amountLend must be greater than 0
+        require(amountLend > 0, "Amount to lend must be greater than 0");
         require(amountLend <= usdcToken.balanceOf(address(this)), "Insufficient funds in contract");
         require(nft.getApproved(tokenId) == address(this), "Contract must be approved to transfer NFT");
         require(durationHours <= MAX_HOURS_FOR_LOAN, "Loan duration exceeds maximum allowed");
