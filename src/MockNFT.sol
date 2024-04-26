@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 /// @author luisvid
 /// @notice This contract is a simple ERC721 contract that allows the owner to mint tokens with a URI. this contract is
 /// used as collateral in the Lending_platform contract.
-contract EtherGems is ERC721, ERC721URIStorage, Ownable {
+contract MockNFT is ERC721, ERC721URIStorage, Ownable {
     uint256 private _nextTokenId;
 
     constructor(address initialOwner) ERC721("EtherGems: Test Edition", "GEMS") Ownable(initialOwner) { }

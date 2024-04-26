@@ -153,6 +153,7 @@ contract NFTLendHub is IERC721Receiver {
     function _completeLoanRepayment(uint256 transactionId, uint256 amount) internal {
         LendingTransaction storage transaction = transactionIdToLendingDetails[transactionId];
 
+        // approve the transfer of USDC from the borrower to the contract
         usdcToken.transferFrom(msg.sender, address(this), amount);
         emit LoanRepaid(msg.sender, amount);
 
