@@ -1,4 +1,4 @@
-# NFTLendHub Contract Documentation
+# NFTLendHub: lending & borrowing platform PoC
 
 The NFTLendHub contract is designed to facilitate a lending platform where NFTs are used as collateral for borrowing a
 mock USDC token. This proof of concept (PoC) aims to demonstrate how blockchain technology can be used for decentralized
