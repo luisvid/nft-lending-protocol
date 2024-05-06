@@ -93,6 +93,11 @@ forge script script/DeployNFTLendHub.s.sol --rpc-url sepolia --broadcast --verif
 
 #### Interact with deployed contracts using TypeScript
 
+```
+npm install --save-dev typescript ts-node @types/node
+npm install ethers dotenv --save
+```
+
 This script interacts with the NFTLendHub, MockNFT, and MockUSDC contracts on the Sepolia network. It performs a series
 of blockchain transactions including approving and transferring USDC, minting NFTs, and initiating a loan using an NFT
 as collateral.
