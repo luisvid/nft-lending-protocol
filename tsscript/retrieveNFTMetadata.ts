@@ -35,11 +35,13 @@ async function getNFTMetadata() {
   const provider = new ethers.JsonRpcProvider(SEPOLIA_URL);
   const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
 
-  const mockNFTAddress = "0x6351487b7bb81a14f6120A888AC5Ee5E1ec32Aa2";
-  const tokenId = 3;
+  const mockNFTAddress = "0x5487bEd72b079Fbd8384314D5eA11eD5ACB3F965";
+  const tokenId = 0;
 
   const mockNFT = new ethers.Contract(mockNFTAddress, abi_MockNFT, wallet);
   try {
+    console.log("Token ID:\n", tokenId);
+    
     const result = await mockNFT.tokenURI(tokenId);
     const ipfsURL = addIPFSProxy(result);
     console.log("IPFS URL\n", ipfsURL);
