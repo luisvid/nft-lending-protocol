@@ -1,0 +1,14 @@
+{
+  "name": "The Nerd Hero 1",
+  "description": "The iPhone rider",
+  "image": "ipfs://QmZ2Zn728vX2a9mcwSFVJSvRu9hpt43TG2gnoi4e9xx5wq",
+  "strength": 20,
+  "attributes": [
+    { "trait_type": "Clothes", "value": "Navy Striped Tee" },
+    { "trait_type": "Hat", "value": "Fisherman's Hat" },
+    { "trait_type": "Fur", "value": "Gray" },
+    { "trait_type": "Background", "value": "Army Green" },
+    { "trait_type": "Eyes", "value": "Eyepatch" },
+    { "trait_type": "Mouth", "value": "Bored" }
+  ]
+}
