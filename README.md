@@ -93,9 +93,11 @@ forge script script/DeployNFTLendHub.s.sol --rpc-url sepolia --broadcast --verif
 
 #### Interact with deployed contracts using TypeScript
 
+To interact with deployed contracts from TypeScript scripts, we need to install `TypeScript`, `ts-node`, `ethers`, and `dotenv`.
+
 ```
 npm install --save-dev typescript ts-node @types/node
-npm install ethers dotenv --save
+npm install --save ethers dotenv 
 ```
 
 This script interacts with the NFTLendHub, MockNFT, and MockUSDC contracts on the Sepolia network. It performs a series
