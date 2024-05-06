@@ -60,16 +60,19 @@ async function initiateLoan() {
     console.log(`NFTLendHub contract now has a balance of ${ethers.formatUnits(usdcBalance, 18)} USDC`);
 
     // Mint a new NFT to the wallet address
-    const mintTx = await mockNFT.safeMint(wallet.address, "https://example.com/nft/metadata.json");
+    const mintTx = await mockNFT.safeMint(wallet.address, "ipfs://QmUjkSSzaurpoWwkLUfp5QiHueCkPzhwvcHt4v2CsE1aoe");
     await mintTx.wait();
     console.log(`NFT minted successfully; transaction hash: ${mintTx.hash}`);
+    // print tokenURI
+    const tokenURI = await mockNFT.tokenURI(3);
+    console.log(`Token URI: ${tokenURI}`);
 
     // Get NFT price from the NFTLendHub, which is needed to calculate maximum loan value
     const nftPrice = await nftLendHub.getNftPrice();
     console.log(`Current NFT market price is ${ethers.formatEther(nftPrice)} ETH`);
 
     // Example token ID (assuming it's the first minted token, which has ID 0)
-    const tokenId = 1;
+    const tokenId = 3;
 
     // Approve NFTLendHub to transfer the minted NFT
     const nftApprovalTx = await mockNFT.approve(nftLendHubAddress, tokenId);
@@ -81,6 +84,8 @@ async function initiateLoan() {
     const loanDuration = 24; // Loan duration in hours
     const initiateLoanTx = await nftLendHub.initiateLoan(mockNFTAddress, tokenId, loanAmount, loanDuration);
     const loanReceipt = await initiateLoanTx.wait();
+    console.log(loanReceipt);
+    
     console.log(`Loan initiated successfully; transaction hash: ${loanReceipt.hash}`);
     
     // Extract the transactionId from the event logs with proper typing

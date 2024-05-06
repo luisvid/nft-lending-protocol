@@ -22,7 +22,7 @@ contract NFTLendHubTest is Test, IERC721Receiver {
         usdc.approve(address(lendHub), type(uint256).max);
         usdc.transfer(address(lendHub), 1000 ether);
         // mint 1 nft to address(1). tokenID = 0
-        nft.safeMint(address(1), "https://example.com");
+        nft.safeMint(address(1), "ipfs://QmUjkSSzaurpoWwkLUfp5QiHueCkPzhwvcHt4v2CsE1aoe");
     }
 
     // initiateLoan() tests
@@ -41,7 +41,7 @@ contract NFTLendHubTest is Test, IERC721Receiver {
     function testInitiateLoan_FailDueToLoanLimit() public {
         // mint 4 nft to address(1), Ids 1 to 4, and approve lendHub to use them.
         for (uint256 i = 1; i < 5; i++) {
-            nft.safeMint(address(1), "https://example.com");
+            nft.safeMint(address(1), "ipfs://QmUjkSSzaurpoWwkLUfp5QiHueCkPzhwvcHt4v2CsE1aoe");
             vm.prank(address(1));
             nft.approve(address(lendHub), i);
         }

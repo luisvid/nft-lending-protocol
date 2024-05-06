@@ -22,7 +22,7 @@ contract NFTLendHubTest is Test, IERC721Receiver {
         usdc.approve(address(lendHub), type(uint256).max);
         usdc.transfer(address(lendHub), 10_000 ether);
         // mint 1 nft to address(1). tokenID = 0
-        nft.safeMint(address(1), "https://example.com");
+        nft.safeMint(address(1), "ipfs://QmUjkSSzaurpoWwkLUfp5QiHueCkPzhwvcHt4v2CsE1aoe");
     }
 
     // initiateLoan() fuzz tests
