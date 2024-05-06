@@ -102,8 +102,6 @@ contract NFTLendHub is IERC721Receiver {
         uint256 nftPrice = getNftPrice();
         require(amountLend <= nftPrice * 70 / 100, "Loan amount exceeds 70% of NFT value");
 
-        nft.safeTransferFrom(msg.sender, address(this), tokenId);
-
         LendingTransaction memory newTransaction = LendingTransaction({
             user: msg.sender,
             nftAddress: nftAddress,
@@ -115,6 +113,8 @@ contract NFTLendHub is IERC721Receiver {
         });
         transactionIdToLendingDetails[nextTransactionId] = newTransaction;
         loanCountByUser[msg.sender]++;
+
+        nft.safeTransferFrom(msg.sender, address(this), tokenId);
 
         bool success = usdcToken.transfer(msg.sender, amountLend);
         require(success, "USDC transfer failed");
@@ -157,12 +157,13 @@ contract NFTLendHub is IERC721Receiver {
 
         // approve the transfer of USDC from the borrower to the contract
         usdcToken.transferFrom(msg.sender, address(this), amount);
-        emit LoanRepaid(msg.sender, amount);
 
         if (transaction.isActive) {
             transaction.isActive = false;
             IERC721(transaction.nftAddress).transferFrom(address(this), msg.sender, transaction.tokenId);
         }
+
+        emit LoanRepaid(msg.sender, amount);
     }
 
     /**
@@ -200,15 +201,15 @@ contract NFTLendHub is IERC721Receiver {
 
         IERC721(transaction.nftAddress).transferFrom(address(this), owner, transaction.tokenId);
 
-        // Update the loan status
-        transaction.isActive = false;
-
         uint256 totalDebt = getTotalAmountToPay(transactionId);
         uint256 refundToBorrower = nftMarketPrice > totalDebt ? nftMarketPrice - totalDebt : 0;
 
         if (refundToBorrower > 0) {
             usdcToken.transfer(transaction.user, refundToBorrower);
         }
+
+        // Update the loan status
+        transaction.isActive = false;
 
         emit DefaultedNftProcessed(transactionId, nftMarketPrice, totalDebt, refundToBorrower);
     }
