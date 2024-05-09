@@ -17,7 +17,7 @@ contract NFTLendHubTest is Test, IERC721Receiver {
     function setUp() public {
         usdc = new MockUSDC(address(this));
         nft = new MockNFT(address(this));
-        lendHub = new NFTLendHub(address(usdc), 5, 3); // 5% interest, max 3 lendings
+        lendHub = new NFTLendHub(address(usdc), 500, 3); // 5% interest (basis ponits), max 3 lendings
         // transfer some usdc to lendHub
         usdc.approve(address(lendHub), type(uint256).max);
         usdc.transfer(address(lendHub), 1000 ether);
@@ -51,7 +51,8 @@ contract NFTLendHubTest is Test, IERC721Receiver {
         lendHub.initiateLoan(address(nft), 1, amountLend, durationHours);
         lendHub.initiateLoan(address(nft), 2, amountLend, durationHours);
         lendHub.initiateLoan(address(nft), 3, amountLend, durationHours);
-        vm.expectRevert("Loan limit exceeded");
+        vm.expectRevert(abi.encodeWithSelector(NFTLendHub.LoanLimitExceeded.selector,3 ));
+        // vm.expectRevert(lendHub.LoanLimitExceeded.selector);
         lendHub.initiateLoan(address(nft), 4, amountLend, durationHours);
         vm.stopPrank();
     }
@@ -65,7 +66,7 @@ contract NFTLendHubTest is Test, IERC721Receiver {
         nft.approve(address(lendHub), tokenId);
         // Address 2 attempts to initiate the loan
         vm.prank(address(2));
-        vm.expectRevert("Caller must own the NFT");
+        vm.expectRevert(NFTLendHub.NotNftOwner.selector);
         lendHub.initiateLoan(address(nft), tokenId, amountLend, durationHours);
     }
 
@@ -75,7 +76,7 @@ contract NFTLendHubTest is Test, IERC721Receiver {
         vm.startPrank(address(1));
         nft.approve(address(lendHub), tokenId);
         uint256 excessiveDuration = lendHub.MAX_HOURS_FOR_LOAN() + 1;
-        vm.expectRevert("Loan duration exceeds maximum allowed");
+        vm.expectRevert(NFTLendHub.LoanDurationExceeded.selector);
         lendHub.initiateLoan(address(nft), tokenId, amountLend, excessiveDuration);
         vm.stopPrank();
     }
@@ -120,7 +121,7 @@ contract NFTLendHubTest is Test, IERC721Receiver {
         uint256 insufficientAmount = totalDue - 10; // Less than needed
         usdc.approve(address(lendHub), insufficientAmount);
 
-        vm.expectRevert("Insufficient amount to cover the loan and interest");
+        vm.expectRevert(NFTLendHub.InsufficientUserBalance.selector);
         lendHub.repayLoan(transactionId, insufficientAmount);
         vm.stopPrank();
     }
@@ -142,7 +143,7 @@ contract NFTLendHubTest is Test, IERC721Receiver {
 
         // Address 2 tries to repay the loan
         vm.prank(address(2));
-        vm.expectRevert("Only the borrower can repay the loan");
+        vm.expectRevert(NFTLendHub.NotBorrower.selector);
         lendHub.repayLoan(transactionId, totalDue);
     }
 

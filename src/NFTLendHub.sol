@@ -12,11 +12,15 @@ import "./MockUSDC.sol";
  * @dev Allows users to lend USDC using NFTs as collateral. Interest accrues per hour.
  */
 contract NFTLendHub is IERC721Receiver {
-    uint8 private interestRate;
-    uint8 private immutable maxNumberOfLendings;
-    uint16 public constant MAX_HOURS_FOR_LOAN = 720; // 30 days in hours
     address immutable owner;
+    uint16 private interestRate; // annual interest rate in basis points
     MockUSDC public immutable usdcToken;
+
+    uint16 private immutable maxNumberOfLendings;
+    uint16 public constant MAX_HOURS_FOR_LOAN = 720; // 30 days in hours
+    uint256 private constant BASIS_POINTS = 10_000;
+    uint256 private constant HOURS_PER_YEAR = 8760; // Average hours in a year, considering leap years might adjust
+        // slightly
 
     //  Structure for storing a transaction
     struct LendingTransaction {
@@ -36,34 +40,54 @@ contract NFTLendHub is IERC721Receiver {
 
     uint256 private nextTransactionId = 1;
 
+    // Events
     event LoanInitiated(address user, uint256 amount, uint256 timeLimit, uint256 transactionID);
     event LoanRepaid(address user, uint256 totalAmountPaid);
     event DefaultedNftProcessed(
         uint256 transactionId, uint256 nftMarketPrice, uint256 totalDebt, uint256 refundToBorrower
     );
 
+    // Errors
+    error NotOwner();
+    error NotNftOwner();
+    error NotBorrower();
+    error ZeroAddress();
+    error UnauthorizedTransfer();
+    error UsdcTransferFailed();
+    error InvalidTransactionId();
+    error InvalidLoanAmount(string message);
+    error InsufficientUserBalance();
+    error InsufficientContractFunds();
+    error LoanLimitExceeded(uint256 maxNumberOfLendings);
+    error LoanDurationExceeded();
+    error LoanNotYetDefaulted();
+    error LoanInactiveOrExpired();
+
+    // Modifiers
     modifier onlyOwner() {
-        require(msg.sender == owner, "Caller is not the owner");
+        if (msg.sender != owner) revert NotOwner();
         _;
     }
 
     modifier validTransactionId(uint256 transactionId) {
-        require(transactionId > 0 && transactionId < nextTransactionId, "Invalid transaction ID");
+        if (transactionId <= 0 || transactionId >= nextTransactionId) revert InvalidTransactionId();
         _;
     }
 
     modifier loanLimitNotExceeded(address user) {
-        require(loanCountByUser[user] < maxNumberOfLendings, "Loan limit exceeded");
+        if (loanCountByUser[user] >= maxNumberOfLendings) revert LoanLimitExceeded(maxNumberOfLendings);
         _;
     }
 
     modifier activeLoan(uint256 transactionId) {
         LendingTransaction storage transaction = transactionIdToLendingDetails[transactionId];
-        require(transaction.isActive && transaction.endTime >= block.timestamp, "Loan is inactive or expired");
+        if (!transaction.isActive || transaction.endTime < block.timestamp) revert LoanInactiveOrExpired();
         _;
     }
 
-    constructor(address usdcAddress, uint8 initialInterestRate, uint8 maxLendings) {
+    // Functions
+
+    constructor(address usdcAddress, uint16 initialInterestRate, uint8 maxLendings) {
         owner = msg.sender;
         usdcToken = MockUSDC(usdcAddress);
         interestRate = initialInterestRate;
@@ -91,16 +115,17 @@ contract NFTLendHub is IERC721Receiver {
         // nft to be used as collateral
         IERC721 nft = IERC721(nftAddress);
 
-        require(msg.sender != address(0), "Cannot lend to zero address");
-        require(msg.sender == nft.ownerOf(tokenId), "Caller must own the NFT");
-        // amountLend must be greater than 0
-        require(amountLend > 0, "Amount to lend must be greater than 0");
-        require(amountLend <= usdcToken.balanceOf(address(this)), "Insufficient funds in contract");
-        require(nft.getApproved(tokenId) == address(this), "Contract must be approved to transfer NFT");
-        require(durationHours <= MAX_HOURS_FOR_LOAN, "Loan duration exceeds maximum allowed");
+        if (msg.sender == address(0)) revert ZeroAddress();
+        if (msg.sender != nft.ownerOf(tokenId)) revert NotNftOwner();
+
+        if (amountLend <= 0) revert InvalidLoanAmount("Loan amount must be greater than zero");
+        if (amountLend > usdcToken.balanceOf(address(this))) revert InsufficientContractFunds();
+
+        if (nft.getApproved(tokenId) != address(this)) revert UnauthorizedTransfer();
+        if (durationHours > MAX_HOURS_FOR_LOAN) revert LoanDurationExceeded();
 
         uint256 nftPrice = getNftPrice();
-        require(amountLend <= nftPrice * 70 / 100, "Loan amount exceeds 70% of NFT value");
+        if (amountLend > nftPrice * 70 / 100) revert InvalidLoanAmount("Loan amount exceeds 70% of NFT value");
 
         LendingTransaction memory newTransaction = LendingTransaction({
             user: msg.sender,
@@ -117,7 +142,7 @@ contract NFTLendHub is IERC721Receiver {
         nft.safeTransferFrom(msg.sender, address(this), tokenId);
 
         bool success = usdcToken.transfer(msg.sender, amountLend);
-        require(success, "USDC transfer failed");
+        if (!success) revert UsdcTransferFailed();
 
         emit LoanInitiated(msg.sender, amountLend, durationHours, nextTransactionId);
 
@@ -137,14 +162,14 @@ contract NFTLendHub is IERC721Receiver {
         validTransactionId(transactionId)
         activeLoan(transactionId)
     {
-        require(msg.sender == transactionIdToLendingDetails[transactionId].user, "Only the borrower can repay the loan");
+        if (msg.sender != transactionIdToLendingDetails[transactionId].user) revert NotBorrower();
 
         uint256 totalAmountToPay = getTotalAmountToPay(transactionId);
-        require(amount >= totalAmountToPay, "Insufficient amount to cover the loan and interest");
-
-        _completeLoanRepayment(transactionId, amount);
+        if (amount < totalAmountToPay) revert InsufficientUserBalance();
 
         loanCountByUser[msg.sender]--;
+
+        _completeLoanRepayment(transactionId, amount);
     }
 
     /**
@@ -155,13 +180,12 @@ contract NFTLendHub is IERC721Receiver {
     function _completeLoanRepayment(uint256 transactionId, uint256 amount) internal {
         LendingTransaction storage transaction = transactionIdToLendingDetails[transactionId];
 
+        transaction.isActive = false;
         // approve the transfer of USDC from the borrower to the contract
-        usdcToken.transferFrom(msg.sender, address(this), amount);
+        bool success = usdcToken.transferFrom(msg.sender, address(this), amount);
+        if (!success) revert UsdcTransferFailed();
 
-        if (transaction.isActive) {
-            transaction.isActive = false;
-            IERC721(transaction.nftAddress).transferFrom(address(this), msg.sender, transaction.tokenId);
-        }
+        IERC721(transaction.nftAddress).transferFrom(address(this), msg.sender, transaction.tokenId);
 
         emit LoanRepaid(msg.sender, amount);
     }
@@ -171,20 +195,19 @@ contract NFTLendHub is IERC721Receiver {
      * the debt from the sale proceeds.
      * @param transactionId The ID of the defaulted loan transaction.
      */
-    function liquidateCollateralOnDefault(uint256 transactionId) public {
+    function liquidateCollateralOnDefault(uint256 transactionId) public validTransactionId(transactionId) {
         LendingTransaction storage transaction = transactionIdToLendingDetails[transactionId];
 
-        require(transactionId > 0 && transactionId < nextTransactionId, "Invalid transaction ID");
-        require(transaction.isActive, "Transaction is no longer active");
-        require(transaction.endTime < block.timestamp, "Loan has not yet defaulted");
+        if (!transaction.isActive) revert LoanInactiveOrExpired();
+        if (transaction.endTime > block.timestamp) revert LoanNotYetDefaulted();
 
         uint256 nftMarketPrice = getNftPrice();
 
-        // Perform the transfer of USDC and NFT
-        _handleDefaultedAssetTransfer(transactionId, nftMarketPrice);
-
         // Decrement the loan count for the user
         loanCountByUser[transaction.user]--;
+
+        // Perform the transfer of USDC and NFT
+        _handleDefaultedAssetTransfer(transactionId, nftMarketPrice);
     }
 
     /**
@@ -195,21 +218,24 @@ contract NFTLendHub is IERC721Receiver {
     function _handleDefaultedAssetTransfer(uint256 transactionId, uint256 nftMarketPrice) internal {
         LendingTransaction storage transaction = transactionIdToLendingDetails[transactionId];
 
-        require(usdcToken.balanceOf(owner) >= nftMarketPrice, "Owner does not have enough USDC to buy the NFT");
+        // Checks
+        if (nftMarketPrice > usdcToken.balanceOf(owner)) revert InsufficientUserBalance();
+
+        // Effects
+        uint256 totalDebt = getTotalAmountToPay(transactionId);
+        uint256 refundToBorrower = nftMarketPrice > totalDebt ? nftMarketPrice - totalDebt : 0;
+        transaction.isActive = false; // Update the loan status before external interactions
+
+        // Interactions
         bool usdcTransferSuccess = usdcToken.transferFrom(owner, address(this), nftMarketPrice);
-        require(usdcTransferSuccess, "Failed to transfer USDC from owner to contract");
+        if (!usdcTransferSuccess) revert UsdcTransferFailed();
 
         IERC721(transaction.nftAddress).transferFrom(address(this), owner, transaction.tokenId);
 
-        uint256 totalDebt = getTotalAmountToPay(transactionId);
-        uint256 refundToBorrower = nftMarketPrice > totalDebt ? nftMarketPrice - totalDebt : 0;
-
         if (refundToBorrower > 0) {
-            usdcToken.transfer(transaction.user, refundToBorrower);
+            bool refundSuccess = usdcToken.transfer(transaction.user, refundToBorrower);
+            if (!refundSuccess) revert UsdcTransferFailed(); // Ensure the transfer is successful
         }
-
-        // Update the loan status
-        transaction.isActive = false;
 
         emit DefaultedNftProcessed(transactionId, nftMarketPrice, totalDebt, refundToBorrower);
     }
@@ -225,9 +251,25 @@ contract NFTLendHub is IERC721Receiver {
         validTransactionId(transactionId)
         returns (uint256)
     {
-        uint256 principalAmount = transactionIdToLendingDetails[transactionId].amountLent;
-        uint256 interestAmount = getInterest(transactionId);
-        return principalAmount + interestAmount;
+        return transactionIdToLendingDetails[transactionId].amountLent + getInterest(transactionId);
+    }
+
+    /**
+     * @notice Retrieves the interest amount of a specific transaction.
+     * @param transactionId The ID of the transaction to retrieve the interest amount for.
+     * @return interestAmount The interest amount of the transaction.
+     */
+    function getInterest(uint256 transactionId) public view validTransactionId(transactionId) returns (uint256) {
+        // get time elapsed in hours
+        uint256 timeElapsedInHours = getTransactionTime(transactionId) / 1 hours;
+
+        // Convert the annual interest rate from basis points to a per-hour rate
+        uint256 hourlyInterestRate = (interestRate * timeElapsedInHours) / (BASIS_POINTS * HOURS_PER_YEAR);
+
+        // Calculate the interest based on the time elapsed
+        // Adjust for basis points to get the final interest amount
+        uint256 interest = (getPricipalAmount(transactionId) * hourlyInterestRate) / BASIS_POINTS;
+        return interest;
     }
 
     /**
@@ -239,23 +281,15 @@ contract NFTLendHub is IERC721Receiver {
         return transactionIdToLendingDetails[transactionId].amountLent;
     }
 
-    /**
-     * @notice Retrieves the interest amount of a specific transaction.
-     * @param transactionId The ID of the transaction to retrieve the interest amount for.
-     * @return interestAmount The interest amount of the transaction.
-     */
-    function getInterest(uint256 transactionId) public view validTransactionId(transactionId) returns (uint256) {
-        uint256 timeSpent = getTimeSpent(transactionId);
-        uint256 interestAmount =
-            transactionIdToLendingDetails[transactionId].amountLent * interestRate / 100 * timeSpent;
-
-        return interestAmount;
-    }
-
     /// @notice Calculates the time spent on a specific transaction.
     /// @param transactionId The ID of the transaction to calculate for.
-    /// @return timeSpent The time spent on the transaction.
-    function getTimeSpent(uint256 transactionId) public view validTransactionId(transactionId) returns (uint256) {
+    /// @return timeSpent The time spent on the transaction in hours
+    function getTransactionTime(uint256 transactionId)
+        public
+        view
+        validTransactionId(transactionId)
+        returns (uint256)
+    {
         if (block.timestamp < transactionIdToLendingDetails[transactionId].endTime) {
             return block.timestamp - transactionIdToLendingDetails[transactionId].startTime;
         } else {
@@ -280,8 +314,7 @@ contract NFTLendHub is IERC721Receiver {
     }
 
     // Setters
-    function changeInterestRate(uint8 _newInterestRate) public {
-        require(msg.sender == owner, "Only owner can change interest rate");
+    function changeInterestRate(uint8 _newInterestRate) public onlyOwner {
         interestRate = _newInterestRate;
     }
 

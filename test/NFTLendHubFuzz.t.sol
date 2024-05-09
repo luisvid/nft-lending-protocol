@@ -17,7 +17,7 @@ contract NFTLendHubTest is Test, IERC721Receiver {
     function setUp() public {
         usdc = new MockUSDC(address(this));
         nft = new MockNFT(address(this));
-        lendHub = new NFTLendHub(address(usdc), 5, 3); // 5% interest, max 3 lendings
+        lendHub = new NFTLendHub(address(usdc), 500, 3); // 5% interest, max 3 lendings
         // transfer some usdc to lendHub
         usdc.approve(address(lendHub), type(uint256).max);
         usdc.transfer(address(lendHub), 10_000 ether);
